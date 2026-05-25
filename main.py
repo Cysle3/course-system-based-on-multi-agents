@@ -2,6 +2,7 @@ from crewai import Task, Crew
 
 from agents.pm_agent import pm_agent
 from agents.architect_agent import architect_agent
+from agents.programmer_agent import programmer_agent
 
 # =========================
 # STEP 1: PM AGENT
@@ -170,3 +171,165 @@ with open("artifacts/db_schema.sql", "w", encoding="utf-8") as f:
 print("db_schema.sql generated successfully!")
 
 print("All architecture artifacts generated successfully!")
+
+with open("artifacts/api_design.md", "r", encoding="utf-8") as f:
+    api_design_content = f.read()
+
+with open("artifacts/db_schema.sql", "r", encoding="utf-8") as f:
+    db_schema_content = f.read()
+
+with open("skills/fastapi_backend_skill.md", "r", encoding="utf-8") as f:
+    backend_skill_content = f.read()
+
+backend_task = Task(
+    description=f"""
+    Based on the following API design:
+
+    {api_design_content}
+
+    And the following database schema:
+
+    {db_schema_content}
+
+    And the following backend development skill:
+
+    {backend_skill_content}
+
+    Generate a high-quality backend development prompt.
+
+    The prompt should instruct a coding agent to build:
+
+    1. FastAPI backend
+    2. SQLite database integration
+    3. SQLAlchemy ORM
+    4. CRUD operations
+    5. Student course selection APIs
+    6. Admin management APIs
+    7. Course conflict handling
+
+    The generated backend should include:
+
+    - main.py
+    - database.py
+    - models.py
+    - schemas.py
+    - crud.py
+    - requirements.txt
+
+    The prompt should:
+    - Be detailed
+    - Be engineering-oriented
+    - Be suitable for Codex or coding agents
+    - Clearly specify folder structure
+    - Clearly specify implementation requirements
+
+
+    Use markdown format.
+    """,
+    expected_output="A complete backend generation prompt",
+    agent=programmer_agent
+)
+
+backend_crew = Crew(
+    agents=[programmer_agent],
+    tasks=[backend_task],
+    verbose=True
+)
+
+backend_result = backend_crew.kickoff()
+
+with open("artifacts/backend_prompt.md", "w", encoding="utf-8") as f:
+    f.write(str(backend_result))
+
+print("backend_prompt.md generated successfully!")
+
+with open("skills/testing_skill.md", "r", encoding="utf-8") as f:
+    testing_skill_content = f.read()
+
+with open("artifacts/api_design.md", "r", encoding="utf-8") as f:
+    api_design_content = f.read()
+
+from agents.tester_agent import tester_agent
+
+test_case_task = Task(
+    description=f"""
+    Based on the following API design:
+
+    {api_design_content}
+
+    And the following testing skill:
+
+    {testing_skill_content}
+
+    Generate comprehensive backend test cases.
+
+    Include:
+    1. Authentication tests
+    2. Course API tests
+    3. Enrollment tests
+    4. Conflict handling tests
+    5. Admin API tests
+
+    Use markdown format.
+    """,
+    expected_output="A complete backend testing document",
+    agent=tester_agent
+)
+
+test_case_crew = Crew(
+    agents=[tester_agent],
+    tasks=[test_case_task],
+    verbose=True
+)
+
+test_case_result = test_case_crew.kickoff()
+
+with open("artifacts/test_cases.md", "w", encoding="utf-8") as f:
+    f.write(str(test_case_result))
+
+print("test_cases.md generated successfully!")
+
+pytest_task = Task(
+    description=f"""
+    Based on the following API design:
+
+    {api_design_content}
+
+    And the following testing skill:
+
+    {testing_skill_content}
+
+    Generate a pytest development prompt.
+
+    The prompt should instruct a coding agent to generate:
+
+    tests/
+    ├── test_auth.py
+    ├── test_courses.py
+    └── test_enrollment.py
+
+    Requirements:
+    - Use pytest
+    - Use FastAPI TestClient
+    - Include assertions
+    - Include enrollment conflict tests
+    - Include authentication tests
+
+    Use markdown format.
+    """,
+    expected_output="A complete pytest generation prompt",
+    agent=tester_agent
+)
+
+pytest_crew = Crew(
+    agents=[tester_agent],
+    tasks=[pytest_task],
+    verbose=True
+)
+
+pytest_result = pytest_crew.kickoff()
+
+with open("artifacts/pytest_prompt.md", "w", encoding="utf-8") as f:
+    f.write(str(pytest_result))
+
+print("pytest_prompt.md generated successfully!")

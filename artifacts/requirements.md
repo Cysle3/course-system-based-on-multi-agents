@@ -1,96 +1,111 @@
-# Requirements Document: Student Course Selection System
-
-**Version:** 1.0  
-**Status:** Draft  
-**Product Manager:** AI Assistant  
-
----
+# Product Requirements Document (PRD)
+**Project Name:** Student Course Selection System (SCSS)
+**Version:** 1.0
+**Status:** Draft
+**Author:** Product Manager
 
 ## 1. Introduction
-This document outlines the requirements for a Minimum Viable Product (MVP) of a Student Course Selection System. The system is designed to facilitate the discovery, registration, and management of student course loads while providing administrators with the tools to manage course offerings and constraints. The system prioritizes data integrity, specifically regarding scheduling conflicts and course capacity limits.
+This document outlines the requirements for the **Student Course Selection System (SCSS)**. The system is designed to facilitate the academic registration process, allowing students to browse available classes, build their schedules, and manage their enrollments. It also provides administrators with the tools to manage the course catalog and monitor student registrations. The system includes automated logic to detect scheduling conflicts and enforce prerequisites.
 
 ---
 
 ## 2. User Roles
 
-| Role | Description |
-| :--- | :--- |
-| **Student** | An authenticated user who browses the course catalog, registers for classes, manages their schedule, and drops courses. |
-| **Administrator** | An authenticated user responsible for managing the course catalog, setting capacity limits, scheduling, and monitoring enrollment metrics. |
-
----
-
-## 3. MVP Feature List
-
-The MVP will focus on the core functionality required to successfully enroll students in classes without scheduling errors or overbooking.
-
-1.  **Authentication System:** Secure login for Students and Administrators.
-2.  **Course Catalog:** A searchable and filterable list of available courses.
-3.  **Student Dashboard:** A view of the student's current enrolled courses and total credit hours.
-4.  **Course Registration:** The ability for students to add a course to their schedule.
-5.  **Course Drop:** The ability for students to remove a course from their schedule.
-6.  **Admin Course Management:** Create, Read, Update, and Delete (CRUD) operations for course listings (Schedule, Capacity, Title, Instructor).
-7.  **Conflict Engine:** Automated validation to prevent time conflicts (overlapping classes) and capacity breaches (waitlisting is *out of scope* for MVP).
-
----
-
-## 4. Functional Requirements
-
-### 4.1 Authentication & Authorization
-*   **FR-01:** The system shall allow Students to log in using a unique Student ID and password.
-*   **FR-02:** The system shall allow Administrators to log in using a unique Admin ID and password.
-*   **FR-03:** The system shall restrict access to Admin-specific features to users logged in with the Administrator role.
-
-### 4.2 Student Course Browsing
-*   **FR-04:** The system shall display a list of all active courses for the current semester.
-*   **FR-05:** The system shall allow students to filter courses by Department (e.g., CS, MATH, ENG).
-*   **FR-06:** The system shall allow students to search courses by Course Code or Title.
-*   **FR-07:** The system shall display the following details for each course:
-    *   Course Code & Title
-    *   Instructor Name
-    *   Days of the week and Time (Start/End)
-    *   Location
-    *   Credit Hours
-    *   Current Enrollment vs. Max Capacity
-
-### 4.3 Course Selection (Registration)
-*   **FR-08:** The system shall allow a student to select a course from the catalog and add it to their personal schedule.
-*   **FR-09 (Conflict Handling):** The system shall prevent a student from adding a course if its meeting times overlap with any course already in the student's schedule.
-*   **FR-10 (Conflict Handling):** The system shall prevent a student from adding a course if the current enrollment count has reached the maximum capacity.
-*   **FR-11:** The system shall provide a clear error message if a course selection fails due to a conflict or capacity limit.
-*   **FR-12:** Upon successful addition, the system shall update the course's "Current Enrollment" count in real-time.
-
-### 4.4 Course Dropping
-*   **FR-13:** The system shall allow a student to remove a course from their current schedule.
-*   **FR-14:** Upon successful removal, the system shall decrement the course's "Current Enrollment" count in real-time.
-*   **FR-15:** The system shall prevent a student from dropping a course if it results in a credit load below the university minimum (e.g., 12 credits for full-time status), with a confirmation warning.
-
-### 4.5 Admin Course Management
-*   **FR-16:** The system shall allow Administrators to create a new course entry by defining all required attributes (Code, Title, Schedule, Instructor, Capacity).
-*   **FR-17:** The system shall allow Administrators to edit the details of an existing course (e.g., changing a room or time).
-*   **FR-18:** The system shall allow Administrators to delete a course *only* if no students are currently enrolled in it.
-*   **FR-19:** The system shall provide an "Enrollment Report" showing the total number of students enrolled in each course.
-
----
-
-## 5. User Stories
-
-### 5.1 Student User Stories
-
-| ID | Story | Acceptance Criteria |
+| Role | Description | Key Permissions |
 | :--- | :--- | :--- |
-| **US-S-01** | As a **Student**, I want to **search for courses by keyword** so that I can find specific subjects I am interested in. | - Input field accepts text.<br>- Results list updates dynamically or upon submission to show matching courses. |
-| **US-S-02** | As a **Student**, I want to **view the details of a course** so that I can understand when and where it meets. | - Clicking a course reveals days, times, room, and instructor info.<br>- I can see how many seats are left. |
-| **US-S-03** | As a **Student**, I want to **register for a class** so that I can secure my spot for the semester. | - I can click "Add" on a course listing.<br>- If successful, the course appears in my "My Schedule" view.<br>- The seat count for the course decreases by one. |
-| **US-S-04** | As a **Student**, I want the **system to warn me if I have a time conflict** so that I do not accidentally register for two overlapping classes. | - If I try to add Class A (Mon 10:00-11:00) while I have Class B (Mon 10:30-11:30), an error appears: "Time conflict with Class B."<br>- Class A is not added to my schedule. |
-| **US-S-05** | As a **Student**, I want to **drop a class** so that I can adjust my schedule if my plans change. | - I can click "Drop" on a course in "My Schedule."<br>- The course is removed from my view.<br>- The seat count for the course increases by one. |
-| **US-S-06** | As a **Student**, I want to **see my total credit hours** so that I know if I am a full-time student. | - "My Schedule" displays a sum of credits for all enrolled courses. |
+| **Student** | An enrolled user selecting classes for an upcoming term. | Browse catalog, View course details, Add courses to schedule, Drop courses, View personal timetable. |
+| **Administrator** | A staff member responsible for managing the course database. | Create/Update/Delete Courses, Create/Update/Delete Course Sections, Manage instructors, View enrollment statistics, Override capacity limits. |
 
-### 5.2 Admin User Stories
+---
 
-| ID | Story | Acceptance Criteria |
-| :--- | :--- | :--- |
-| **US-A-01** | As an **Administrator**, I want to **create a new course** so that it is available for students to register. | - I can enter Course Code, Title, Instructor, Schedule, and Max Capacity.<br>- The course appears in the global catalog immediately upon saving. |
-| **US-A-02** | As an **Administrator**, I want to **set a maximum capacity** for a course so that the classroom is not overcrowded. | - I can input an integer for "Max Seats."<br>- Once enrollment hits this number, students receive a "Course Full" error. |
-| **US-A-03** | As an **Administrator**, I want to **modify the schedule of a course** so that I can fix room or time errors. | - I can edit the time/day fields of an existing course.<br>- The system saves the new schedule (Conflict checking for existing students is *out of scope* for MVP, but admin is warned to notify students). |
-| **US-A-04** | As an **Administrator**, I want to **view enrollment numbers** so that I can see which classes are popular or full. | - The course list shows a column with "Enrolled / Capacity". |
+## 3. Functional Requirements
+
+### 3.1 Student Course Browsing
+**FR-BROWSE-01:** The system shall display a searchable list of available courses for the active term.
+**FR-BROWSE-02:** The system shall allow users to filter courses by Department, Course Code, Day of the Week, and Time of Day.
+**FR-BROWSE-03:** The system shall display detailed information for a selected course, including:
+*   Course Code and Title
+*   Description
+*   Credit Hours
+*   Prerequisites
+*   Instructor Name
+*   Location
+*   Meeting Days and Times
+*   Current Enrollment vs. Max Capacity
+
+### 3.2 Course Selection (Registration)
+**FR-SELECT-01:** The system shall allow a student to add a course section to their personal schedule.
+**FR-SELECT-02:** The system shall verify that the student meets all prerequisites before allowing enrollment.
+**FR-SELECT-03:** The system shall verify that the course has not reached its maximum capacity before allowing enrollment.
+**FR-SELECT-04:** The system shall present a success or error message upon attempting to add a course.
+**FR-SELECT-05:** The system shall prevent a student from enrolling in the same course code more than once (unless defined as a repeatable course).
+
+### 3.3 Course Dropping
+**FR-DROP-01:** The system shall allow a student to remove a course section from their personal schedule.
+**FR-DROP-02:** The system shall require a confirmation action ("Are you sure?") before a course is dropped.
+**FR-DROP-03:** Upon dropping a course, the system shall immediately update the "Current Enrollment" count for that section, making the seat available to other students.
+**FR-DROP-04:** The system shall maintain a historical log of dropped courses for the student's record.
+
+### 3.4 Admin Course Management
+**FR-ADMIN-01:** The system shall allow Administrators to create new Courses (defining the generic subject matter, code, and description).
+**FR-ADMIN-02:** The system shall allow Administrators to create new Course Sections (specific instances of a course with specific times, rooms, and instructors).
+**FR-ADMIN-03:** The system shall allow Administrators to edit the Max Capacity of a section.
+**FR-ADMIN-04:** The system shall allow Administrators to deactivate or cancel a section, which automatically notifies enrolled students.
+
+### 3.5 Course Conflict Handling
+**FR-CONFLICT-01:** The system shall detect **Time Conflicts**: A student cannot enroll in Section A if it overlaps in time and day with Section B.
+**FR-CONFLICT-02:** The system shall detect **Prerequisite Conflicts**: The system must check the student's academic history to ensure required prior courses have been passed.
+**FR-CONFLICT-03:** The system shall detect **Capacity Conflicts**: If Current Enrollment >= Max Capacity, the add request is rejected.
+**FR-CONFLICT-04:** If a conflict is detected, the system shall display a specific error message explaining the nature of the conflict (e.g., "Time conflict with CS-101," "Missing Prerequisite MATH-101").
+
+---
+
+## 4. User Stories
+
+### 4.1 Student User Stories
+*   **US-STU-01 (Browsing):** As a **Student**, I want to **search for courses by department**, so that I can find all classes offered by the Biology department.
+*   **US-STU-02 (View Details):** As a **Student**, I want to **view the syllabus and prerequisites**, so that I can ensure I am prepared for the class workload.
+*   **US-STU-03 (Add Course):** As a **Student**, I want to **add a class to my schedule**, so that I can secure my spot for the upcoming semester.
+*   **US-STU-04 (Conflict Prevention):** As a **Student**, I want the system to **warn me if I try to add two classes at the same time**, so that I don't accidentally double-book myself.
+*   **US-STU-05 (Drop Course):** As a **Student**, I want to **drop a class I no longer wish to take**, so that I can free up time in my schedule and avoid a bad grade.
+*   **US-STU-06 (View Schedule):** As a **Student**, I want to **view my weekly calendar grid**, so that I can visualize my workload.
+
+### 4.2 Administrator User Stories
+*   **US-ADM-01 (Create Course):** As an **Admin**, I want to **add a new course to the catalog**, so that it is available for students to find.
+*   **US-ADM-02 (Schedule Section):** As an **Admin**, I want to **schedule a specific section of a course in a specific room at a specific time**, so that students know where and when to go.
+*   **US-ADM-03 (Set Capacity):** As an **Admin**, I want to **set the maximum number of students for a class**, so that the room doesn't become overcrowded.
+*   **US-ADM-04 (Monitor Enrollment):** As an **Admin**, I want to **see how many students are enrolled in each section**, so that I can decide if I need to open more sections.
+
+---
+
+## 5. MVP Feature List
+
+The Minimum Viable Product (MVP) will focus on the core flow of Admin setting up courses and Students successfully adding/dropping them with conflict validation.
+
+### Phase 1: Core Infrastructure & Admin Setup
+1.  **Role Management:** Basic login and role differentiation (Student vs. Admin).
+2.  **Course Catalog Database:** Backend structure to store Course and Section data.
+3.  **Admin Course Management:**
+    *   Create Courses (Code, Title, Credits).
+    *   Create Sections (Time, Room, Instructor, Capacity).
+    *   Edit/Delete capabilities.
+
+### Phase 2: Student Browsing & Viewing
+1.  **Course Search/Filter UI:** List view of all available sections.
+2.  **Course Detail View:** Modal or page showing all section details (FR-BROWSE-03).
+3.  **Personal Schedule View:** A read-only view of the student's currently enrolled classes.
+
+### Phase 3: Selection Logic & Conflict Handling
+1.  **Add to Cart/Register:** Button functionality to add a section.
+2.  **Time Conflict Engine:** Algorithm to compare new section times against existing student schedule (FR-CONFLICT-01).
+3.  **Capacity Check:** Real-time counter check (FR-CONFLICT-03).
+4.  **Error Messaging:** UI feedback for conflicts (FR-CONFLICT-04).
+
+### Phase 4: Drop & Management
+1.  **Drop Functionality:** Ability to remove a section (FR-DROP-01).
+2.  **Capacity Reversion:** Logic to increment available seats when a student drops (FR-DROP-03).
+3.  **Admin Override (Bonus):** Simple button for Admin to force-add a student past capacity/conflicts (essential for real-world operations).
+
+---
+
+*End of Document*

@@ -1,326 +1,301 @@
-# Software Architecture Design Document
-## Student Course Selection System (MVP)
-
-**Version:** 1.0  
-**Status:** Design Draft  
-**Author:** Software Architect  
+# Software Architecture Design Document (SADD)
+**Project Name:** Student Course Selection System (SCSS)
+**Version:** 1.0
+**Status:** Design Phase
+**Author:** Software Architect
 
 ---
 
-## 1. System Architecture Overview
+## 1. System Architecture
 
-### 1.1 Architectural Pattern
-The system will adopt a **Monolithic Client-Server Architecture** using the **Model-View-Controller (MVC)** pattern. Given the scope of the MVP and the strong data consistency requirements (specifically for course capacity and scheduling conflicts), a monolithic approach ensures transactional integrity without the complexity of distributed transactions.
+The SCSS will be implemented as a **client-server web application** following a **Layered Architecture** pattern. This ensures separation of concerns, scalability, and maintainability. The system will be deployed as a modular monolith for the MVP to simplify operations while allowing for future migration to microservices if necessary.
 
-### 1.2 High-Level Diagram
-```mermaid
-graph TD
-    Client[Web Browser / React App]
-    
-    subgraph "API Gateway / Load Balancer (Optional for MVP)"
-        LB[Nginx / Reverse Proxy]
-    end
-    
-    subgraph "Backend Application Server (Node.js / NestJS)"
-        AuthController[Auth Controller]
-        CourseController[Course Controller]
-        StudentController[Student Controller]
-        
-        AuthService[Auth Service]
-        CourseService[Course Service]
-        EnrollmentService[Enrollment Service]
-        ConflictEngine[Conflict Engine]
-        
-        DBORM[TypeORM / Prisma]
-    end
-    
-    subgraph "Data Layer"
-        PostgreSQL[(PostgreSQL Database)]
-    end
+### 1.1 High-Level Architecture Diagram
 
-    Client -->|HTTPS/JSON| LB
-    LB --> AuthController
-    LB --> CourseController
-    LB --> StudentController
-    
-    AuthController --> AuthService
-    CourseController --> CourseService
-    StudentController --> EnrollmentService
-    
-    EnrollmentService --> ConflictEngine
-    EnrollmentService --> DBORM
-    CourseService --> DBORM
-    AuthService --> DBORM
-    
-    DBORM --> PostgreSQL
+```text
+[ Client Layer ]          [ Security Layer ]        [ Application Layer ]
++-------------------+     +----------------+      +--------------------------+
+|                   |     |                |      |   API Gateway / LB       |
+|   Web Browser     |<--->|  OAuth 2.0 /   |<---->| (Nginx / Cloud Load Bal.) |
+| (React / SPA)     |     |  JWT Auth      |      +------------+-------------+
++-------------------+     +----------------+                   |
+                                                           |
+                                                           v
+                                              +--------------------------+
+                                              |   Backend Services       |
+                                              |  (Java Spring Boot)      |
+                                              |  +--------------------+  |
+                                              |  | Auth Service       |  |
+                                              |  | Catalog Service   |  |
+                                              |  | Registration Svc  |  |
+                                              |  | User Service      |  |
+                                              |  +--------------------+  |
+                                              +------------+-------------+
+                                                           |
+         +------------------+                +-------------+-------------+
+         |                  |                |                           |
++--------v--------+ +--------v--------+ +-----v-------+         +--------v--------+
+|  PostgreSQL DB  | |   Redis Cache   | | File System |         |  Ext. SIS API   |
+|  (Primary Data) | | (Session/Seat  | | (Logs/Conf) |         | (Prereq/History)|
+|                 | |  Locking)      | |             |         |                 |
++-----------------+ +-----------------+ +-------------+         +-----------------+
 ```
 
-### 1.3 Key Principles
-1.  **Separation of Concerns:** Business logic is encapsulated in Services, while HTTP handling is managed by Controllers.
-2.  **Data Integrity:** Database constraints and ACID transactions are used to prevent over-enrollment and data corruption.
-3.  **Security:** Role-Based Access Control (RBAC) is enforced at the API level.
-4.  **Scalability (Read):** While the write path is strictly consistent, the catalog read path can be cached (e.g., Redis) in future iterations to handle high traffic during registration periods.
+### 1.2 Architectural Principles
+1.  **RESTful API Design:** Communication between client and server will occur via standard HTTP methods (GET, POST, PUT, DELETE) with JSON payloads.
+2.  **ACID Compliance:** Critical operations (enrollment, dropping) strictly adhere to Atomicity, Consistency, Isolation, and Durability to prevent data corruption (e.g., overbooking).
+3.  **Statelessness:** The backend services are stateless; session state is stored in Redis.
+4.  **Security in Depth:** Authentication and Authorization are enforced at the gateway and service layer.
 
 ---
 
 ## 2. Technology Stack
 
+The technology stack is selected based on stability, ecosystem support, and suitability for transaction-heavy educational systems.
+
 ### 2.1 Frontend
 | Component | Technology | Justification |
 | :--- | :--- | :--- |
-| **Framework** | React.js (v18+) | Component-based architecture, vast ecosystem, efficient DOM updates for dynamic schedules. |
-| **State Management** | Redux Toolkit / Context API | Manage global state (User session, Cart/Schedule) and pass enrollment data efficiently. |
-| **UI Library** | Material UI (MUI) or Tailwind CSS | Rapid prototyping, responsive design, pre-built components for forms and tables. |
-| **HTTP Client** | Axios | Promise-based, supports interceptors for attaching JWT tokens. |
+| **Framework** | React 18+ | Component-based architecture, vast ecosystem, efficient DOM handling. |
+| **Language** | TypeScript | Type safety reduces runtime errors and improves maintainability. |
+| **State Management** | Redux Toolkit (RTK) | Robust handling of global state (user schedule, cart). |
+| **UI Library** | Material UI (MUI) | Pre-built components ensuring consistent design and accessibility. |
+| **HTTP Client** | Axios | Promise-based HTTP client with interceptor support for JWT tokens. |
+| **Scheduler UI** | FullCalendar | Industry standard for rendering weekly timetables. |
 
 ### 2.2 Backend
 | Component | Technology | Justification |
 | :--- | :--- | :--- |
-| **Runtime** | Node.js | Non-blocking I/O, ideal for handling high concurrency of student registration requests. |
-| **Framework** | NestJS | Structured, opinionated framework supporting TypeScript, Dependency Injection, and modular architecture. |
-| **ORM** | Prisma or TypeORM | Type-safe database access, migration management, and efficient query building. |
-| **Auth** | Passport.js + JWT (JSON Web Tokens) | Industry standard for stateless authentication, easy integration with RBAC. |
+| **Runtime** | Java 17 (LTS) | Enterprise-grade stability. |
+| **Framework** | Spring Boot 3.x | Simplifies configuration, embedded server, powerful dependency injection. |
+| **Security** | Spring Security (OAuth2/JWT) | Standard for secure authentication and role-based authorization. |
+| **ORM** | Hibernate (JPA) | Object-relational mapping for database interactions. |
+| **Validation** | Jakarta Bean Validation | Declarative validation of API inputs. |
+| **Build Tool** | Maven | Dependency management and build lifecycle. |
 
-### 2.3 Database
+### 2.3 Data & Infrastructure
 | Component | Technology | Justification |
 | :--- | :--- | :--- |
-| **Database** | PostgreSQL | Relational data model fits perfectly (Students, Courses, Enrollments). Strict ACID compliance is required to prevent "double booking" of seats. |
+| **Database** | PostgreSQL 15 | ACID compliant, complex querying capability, reliable JSON support. |
+| **Caching** | Redis 7 | High-speed storage for session management and distributed locking during registration. |
+| **Containerization** | Docker | Consistency across development, testing, and production environments. |
 
 ---
 
-## 3. Database Schema Design
+## 3. Backend Modules
 
-The database is normalized to 3rd Normal Form (3NF) to ensure data integrity.
+The backend is organized into distinct modules (packages in Java) following Domain-Driven Design (DDD) principles loosely.
 
-### 3.1 Entity Relationship Diagram (ERD)
+### 3.1 Core Modules
 
-```mermaid
-erDiagram
-    USER ||--o{ ENROLLMENT : has
-    COURSE ||--o{ ENROLLMENT : "registered by"
-    
-    USER {
-        uuid id PK
-        string student_id UK "Unique University ID"
-        string password_hash
-        string role "enum: STUDENT, ADMIN"
-        string email
-        datetime created_at
-    }
+#### A. Auth Module
+*   **Responsibility:** Handle login, logout, token generation (JWT), and password hashing.
+*   **Key Classes:**
+    *   `AuthController`: Exposes `/api/auth/login`.
+    *   `JwtUtil`: Generates and validates tokens.
+    *   `UserDetailsService`: Loads user-specific data.
 
-    COURSE {
-        uuid id PK
-        string code UK "e.g., CS101"
-        string title
-        string instructor
-        integer credits
-        integer max_capacity
-        integer current_enrollment
-        string day_of_week "enum: MON, TUE..."
-        time start_time
-        time end_time
-        string location
-        boolean is_active
-    }
+#### B. User Module
+*   **Responsibility:** Manage user profiles and role assignments.
+*   **Key Entities:**
+    *   `User`: ID, username, password, role (STUDENT, ADMIN).
+    *   `StudentProfile`: User ID, Major, Academic Year.
+*   **Key APIs:**
+    *   `GET /api/users/me`: Retrieve current user profile.
 
-    ENROLLMENT {
-        uuid id PK
-        uuid user_id FK
-        uuid course_id FK
-        datetime enrolled_at
-        string semester
-    }
-```
+#### C. Catalog Module
+*   **Responsibility:** Manage course data and sections (Read-Heavy).
+*   **Key Entities:**
+    *   `Course`: ID, Code (e.g., CS-101), Title, Credits, Description.
+    *   `Section`: ID, Course ID, Instructor, Room, DayOfWeek, StartTime, EndTime, Capacity, CurrentEnrollment.
+    *   `Prerequisite`: ID, Course ID, RequiredCourseID.
+*   **Key APIs:**
+    *   `GET /api/catalog/courses`: Searchable list of courses.
+    *   `GET /api/catalog/sections/{id}`: Details for a specific section.
+    *   **Caching Strategy:** Catalog data is cached in Redis to reduce database load during browsing peak times.
 
-### 3.2 Key Constraints & Indexes
-*   **Unique Constraint:** `USER(student_id)` ensures no duplicate students.
-*   **Unique Constraint:** `COURSE(code)` ensures no duplicate course codes.
-*   **Foreign Keys:** `ENROLLMENT` references `USER` and `COURSE` with `ON DELETE CASCADE` (if a user is deleted, their enrollments vanish).
-*   **Capacity Check:** Application-level logic combined with optimistic locking or row locking during transaction to ensure `current_enrollment <= max_capacity`.
+#### D. Registration Module
+*   **Responsibility:** The core transactional engine handling adds, drops, and validation logic.
+*   **Key Entities:**
+    *   `Enrollment`: ID, StudentID, SectionID, Status (ACTIVE, DROPPED), Timestamp.
+    *   `RegistrationAttempt`: Log of conflict errors (FR-CONFLICT-04).
+*   **Key APIs:**
+    *   `POST /api/registration/enroll`: Request to add a section.
+    *   `DELETE /api/registration/drop/{sectionId}`: Request to drop a section.
+    *   `GET /api/registration/schedule`: Retrieve student's current timetable.
 
----
-
-## 4. Backend Modules
-
-The backend is organized into distinct modules.
-
-### 4.1 Authentication Module
-**Responsibility:** Verify identity and manage sessions.
-*   **Controller:** `AuthController`
-    *   `POST /api/auth/login`: Validates credentials, returns JWT.
-    *   `POST /api/auth/register`: (Optional MVP feature) Create new student accounts.
-*   **Service:** `AuthService`
-    *   Hashes passwords using bcrypt.
-    *   Generates signed JWTs containing `userId` and `role`.
-    *   Validates JWTs via middleware strategy.
-
-### 4.2 Course Management Module
-**Responsibility:** Admin CRUD operations and Student browsing.
-*   **Controller:** `CourseController`
-    *   `GET /api/courses`: Public (or Authenticated) access. Supports query params `?search=math&department=CS`.
-    *   `POST /api/courses` (Admin only): Create course.
-    *   `PUT /api/courses/:id` (Admin only): Update details.
-    *   `DELETE /api/courses/:id` (Admin only): Delete if enrollment is 0.
-    *   `GET /api/courses/stats` (Admin only): Enrollment metrics.
-*   **Service:** `CourseService`
-    *   Handles search filtering logic (SQL `LIKE` operators).
-    *   Calculates `enrollment_ratio` for dashboard displays.
-
-### 4.3 Student & Enrollment Module
-**Responsibility:** Manages the student schedule and handles transactional logic.
-*   **Controller:** `StudentController`
-    *   `GET /api/student/schedule`: Returns current user's enrolled courses and total credits.
-    *   `POST /api/student/enroll/:courseId`: Initiates add logic.
-    *   `DELETE /api/student/drop/:courseId`: Initiates drop logic.
-*   **Service:** `EnrollmentService` (Contains the core business logic)
-    *   **`enrollCourse(userId, courseId)`**:
-        1.  Start Transaction.
-        2.  Fetch Course (Lock row).
-        3.  Fetch User Enrollments.
-        4.  Call `ConflictEngine.validate()`.
-        5.  Check Capacity.
-        6.  Create Enrollment Record.
-        7.  Increment `Course.current_enrollment`.
-        8.  Commit Transaction.
-    *   **`dropCourse(userId, courseId)`**:
-        1.  Start Transaction.
-        2.  Calculate credits remaining *after* drop.
-        3.  If credits < min (e.g., 12), throw warning (client must confirm).
-        4.  Delete Enrollment Record.
-        5.  Decrement `Course.current_enrollment`.
-        6.  Commit Transaction.
+#### E. Admin Module
+*   **Responsibility:** CRUD operations for catalog and administrative overrides.
+*   **Key APIs:**
+    *   `POST /api/admin/courses`: Create new course.
+    *   `POST /api/admin/sections`: Create new section.
+    *   `POST /api/admin/override`: Force-add a student (bypassing conflicts).
 
 ---
 
-## 5. Frontend Modules
+## 4. Frontend Modules
 
-The frontend is a Single Page Application (SPA).
+The frontend is a Single Page Application (SPA) structured by feature.
 
-### 5.1 Layout & Navigation
-*   **App Shell:** Contains the main navigation bar.
-*   **Route Protection:** `ProtectedRoute` component checks for JWT token existence; redirects to login if missing.
+### 4.1 Module Structure
 
-### 5.2 Authentication Views
-*   **LoginPage:** Form for Student ID/Admin ID and Password.
-*   **State:** Stores the JWT in `localStorage` and global Redux state.
+#### A. Shared Module
+*   **Components:** `Layout` (Sidebar/Navbar), `PrivateRoute` (Route Guard), `LoadingSpinner`, `ErrorToast`.
+*   **Services:** `apiClient` (Axios instance with interceptors), `authService`.
 
-### 5.3 Catalog Module
-*   **CourseCatalogPage:**
-    *   **SearchBar:** Inputs for text search.
-    *   **FilterSidebar:** Checkboxes for departments, days of the week.
-    *   **CourseList:** Iterates through results, renders `CourseCard`.
-*   **CourseCard:** Displays code, title, instructor, time, and capacity bar. "Add Course" button triggers enrollment.
+#### B. Auth Module
+*   **Pages:** `LoginPage`.
+*   **Features:** Form validation, credential submission, token storage.
 
-### 5.4 Student Dashboard Module
-*   **SchedulePage:**
-    *   **SummaryHeader:** Displays "Total Credits: X".
-    *   **CalendarView / ListView:** Visual representation of the weekly schedule.
-    *   **EnrolledList:** List of courses with "Drop" button.
-*   **ConflictToast:** A notification component that appears if `enrollCourse` returns a 409 Conflict error.
+#### C. Student Portal Module
+*   **Pages:**
+    *   `CourseSearchPage`:
+        *   **Components:** `FilterBar` (Dept, Time), `CourseCard`, `CourseDetailModal`.
+    *   `SchedulePage`:
+        *   **Components:** `WeeklyCalendar` (FullCalendar wrapper), `EnrollmentList`.
+*   **State (Redux Slices):**
+    *   `catalogSlice`: Stores search results and filters.
+    *   `scheduleSlice`: Stores enrolled sections, handles optimistic UI updates for drop/add.
 
-### 5.5 Admin Dashboard Module
-*   **AdminCourseManager:**
-    *   **DataGrid/Table:** Lists all courses with "Edit" and "Delete" actions.
-    *   **CourseForm:** Modal or separate page to input Course Code, Capacity, Schedule, etc.
+#### D. Admin Portal Module
+*   **Pages:**
+    *   `CourseManagement`: Table view of courses with Edit/Delete actions.
+    *   `SectionManagement`: Form to add sections (Time/Room/Capacity).
+    *   `Dashboard`: Charts showing enrollment statistics.
+*   **Components:** `SectionForm`, `StatsWidget`.
 
 ---
 
-## 6. Course Conflict Handling Logic
+## 5. Course Conflict Handling Logic
 
-The conflict engine is the critical business logic component located in the Backend `EnrollmentService`.
+This is the most critical business logic component (FR-CONFLICT-01 to FR-CONFLICT-04). The logic resides on the **Backend** within the `RegistrationService`. It uses a **Transactional** approach to ensure data integrity.
 
-### 6.1 Input Data
-*   **Proposed Course:** `{ day: "MON", start: "10:00", end: "11:00" }`
-*   **Existing Schedule:** Array of course objects the student is already enrolled in.
+### 5.1 The Validation Sequence (Chain of Responsibility)
 
-### 6.2 The Algorithm (Time Overlap Check)
-Two time ranges `[StartA, EndA)` and `[StartB, EndB)` overlap if and only if:
-`StartA < EndB` **AND** `EndA > StartB`.
+When a `POST /registration/enroll` request is received, the system performs the following checks in order. If any check fails, an exception is thrown, and the transaction is rolled back.
 
-*Note: We treat the end time as exclusive (e.g., class ends at 10:50, next starts at 11:00).*
+1.  **Existence Check:** Verify the `Section` exists and is active.
+2.  **Duplicate Check:** Verify the student is not already enrolled in this specific `Course` (or `Section`).
+3.  **Prerequisite Check:** Verify the student has passed the required courses based on their academic history.
+4.  **Capacity Check:** Verify `CurrentEnrollment < MaxCapacity`. (Note: Implemented via database row locking to handle race conditions).
+5.  **Time Conflict Check:** Compare the new section's schedule against the student's existing enrolled sections.
 
-### 6.3 Pseudocode Implementation
+### 5.2 Detailed Algorithms
 
-```typescript
-interface CourseTime {
-  day: string; // "MON", "TUE", etc.
-  startTime: string; // "HH:mm" format
-  endTime: string;   // "HH:mm" format
-}
+#### A. Time Conflict Detection
+*Inputs:* New Section Time Range, List of Existing Enrolled Sections.*
+*Logic:*
+A conflict exists if the day matches AND the time ranges overlap.
+Overlap Formula: `(StartA < EndB) && (EndA > StartB)`
 
-class ConflictEngine {
-
-  /**
-   * Checks if a potential course conflicts with existing enrollments.
-   * Throws Error if conflict found.
-   */
-  public static validate(newCourse: CourseTime, existingSchedule: CourseTime[]): void {
-    
-    // Helper to convert "HH:mm" to minutes for easy comparison
-    const toMinutes = (time: string): number => {
-      const [h, m] = time.split(':').map(Number);
-      return h * 60 + m;
-    };
-
-    const newStart = toMinutes(newCourse.startTime);
-    const newEnd = toMinutes(newCourse.endTime);
-
-    for (const existing of existingSchedule) {
-      // 1. Check Day Match
-      if (existing.day !== newCourse.day) {
-        continue; // Different days, no conflict
-      }
-
-      // 2. Check Time Overlap
-      const existingStart = toMinutes(existing.startTime);
-      const existingEnd = toMinutes(existing.endTime);
-
-      const overlaps = (newStart < existingEnd) && (newEnd > existingStart);
-
-      if (overlaps) {
-        throw new ConflictError(
-          `Schedule Conflict: ${newCourse.day} ${newCourse.startTime}-${newCourse.endTime} overlaps with existing class.`
-        );
-      }
+```java
+boolean hasTimeConflict(Section newSection, List<Section> existingSections) {
+    for (Section existing : existingSections) {
+        // Check Day Match (assuming enum or string match)
+        if (!existing.getDayOfWeek().equals(newSection.getDayOfWeek())) {
+            continue;
+        }
+        
+        // Check Time Overlap
+        boolean startsBeforeExistingEnds = newSection.getStartTime().isBefore(existing.getEndTime());
+        boolean endsAfterExistingStarts = newSection.getEndTime().isAfter(existing.getStartTime());
+        
+        if (startsBeforeExistingEnds && endsAfterExistingStarts) {
+            return true; // Conflict found
+        }
     }
-  }
+    return false;
 }
 ```
 
-### 6.4 Integration with Capacity Logic
-The conflict check runs *before* the capacity check within the transaction.
+#### B. Capacity Check (Concurrency Control)
+To prevent two students from registering for the last seat simultaneously (Race Condition), we use **Pessimistic Locking** (via JPA `@Lock(LockModeType.PESSIMISTIC_WRITE)`) or a database atomic update.
 
-1.  **Conflict Check:** Logic only (reads student schedule). If fail -> Abort.
-2.  **Capacity Check:** Read/Write operation on DB.
-    *   `SELECT * FROM courses WHERE id = ? FOR UPDATE;` (Lock the row)
-    *   `IF (current_enrollment >= max_capacity) Throw Error;`
-3.  **Persist:** Insert enrollment, update counter.
+*Approach: Atomic Update with SQL Constraints*
+1.  Start Transaction.
+2.  Execute SQL: `UPDATE section SET current_enrollment = current_enrollment + 1 WHERE id = ? AND current_enrollment < max_capacity`.
+3.  Check updated rows count. If `0`, it means capacity was full.
+4.  If `1`, proceed to insert Enrollment record.
+5.  Commit Transaction.
+
+#### C. Prerequisite Check
+*Logic:*
+1.  Retrieve `Prerequisite` entities for the target Course.
+2.  Retrieve `StudentAcademicHistory` (completed courses with passing grades).
+3.  Ensure for every prerequisite `P`, there exists a record in history where `CourseCode == P.Code` AND `Status == PASSED`.
+
+```java
+boolean meetsPrerequisites(Course course, Student student) {
+    List<Course> prerequisites = course.getPrerequisites();
+    if (prerequisites.isEmpty()) return true;
+
+    Set<Course> completedCourses = student.getCompletedCourses(); // Filtered by passing grade
+
+    // Check if all prerequisites are present in completed courses
+    return completedCourses.containsAll(prerequisites);
+}
+```
+
+### 5.3 Error Response Structure
+If validation fails, the API returns a structured error message:
+
+```json
+{
+  "status": 400,
+  "error": "CONFLICT_DETECTED",
+  "message": "Unable to enroll in CS-201.",
+  "details": [
+    {
+      "type": "TIME_CONFLICT",
+      "conflictingCourse": "PHYS-101",
+      "description": " overlaps with PHYS-101 on Mondays 10:00-11:30."
+    }
+  ]
+}
+```
 
 ---
 
-## 7. Sequence Flows
+## 6. Database Schema (Simplified)
 
-### 7.1 Student Registration Flow
-1.  **Student** clicks "Add Course" on Frontend.
-2.  **Frontend** sends `POST /api/student/enroll/{courseId}` with JWT in Header.
-3.  **Backend** Middleware verifies JWT and extracts `userId`.
-4.  **EnrollmentService** starts DB Transaction.
-5.  **EnrollmentService** fetches Student's current schedule.
-6.  **ConflictEngine** compares new course times against current schedule.
-    *   *If Conflict:* Transaction Rollback -> Return `409 Conflict`.
-7.  **EnrollmentService** locks the Course row.
-8.  **EnrollmentService** checks `current_enrollment < max_capacity`.
-    *   *If Full:* Transaction Rollback -> Return `400 Bad Request`.
-9.  **EnrollmentService** creates record in `Enrollments` table.
-10. **EnrollmentService** increments `current_enrollment` in `Courses` table.
-11. Transaction Commit.
-12. Return `200 OK` to Frontend.
-13. **Frontend** updates local state to show course in schedule.
+**Table: Users**
+- `id` (PK, UUID)
+- `username` (Unique)
+- `password_hash`
+- `role` (Enum: STUDENT, ADMIN)
 
-### 7.2 Admin Course Creation Flow
-1.  **Admin** submits form with Course details.
-2.  **Frontend** sends `POST /api/courses`.
-3.  **Backend** checks Admin Role.
-4.  **CourseService** validates inputs (e.g., `start_time` < `end_time`).
-5.  **CourseService** inserts new row into `Courses` table.
-6.  Return `201 Created`.
+**Table: Courses**
+- `id` (PK, UUID)
+- `code` (e.g., "CS101")
+- `title`
+- `credits`
+- `description`
+
+**Table: Prerequisites**
+- `course_id` (FK)
+- `prerequisite_course_id` (FK)
+
+**Table: Sections**
+- `id` (PK, UUID)
+- `course_id` (FK)
+- `instructor_name`
+- `room`
+- `day_of_week` (Enum: MON, TUE...)
+- `start_time` (Time)
+- `end_time` (Time)
+- `max_capacity` (Int)
+- `current_enrollment` (Int, Default 0)
+
+**Table: Enrollments**
+- `id` (PK, UUID)
+- `student_id` (FK)
+- `section_id` (FK)
+- `status` (Enum: ACTIVE, DROPPED)
+- `created_at` (Timestamp)
+
+**Table: StudentHistory**
+- `id` (PK)
+- `student_id` (FK)
+- `course_code`
+- `grade` (Char)
+- `status` (Enum: PASSED, FAILED)
