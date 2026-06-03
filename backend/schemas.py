@@ -94,6 +94,7 @@ class ScheduleSectionSummary(APIModel):
 
 
 class RegistrationResponse(APIModel):
+    enrollment_id: int = Field(..., alias="enrollmentId")
     course: ScheduleCourseSummary
     section: ScheduleSectionSummary
     enrollment_date: datetime | None = Field(default=None, alias="enrollmentDate")
@@ -103,6 +104,58 @@ class MyScheduleResponse(APIModel):
     student_id: str = Field(..., alias="studentId")
     total_credits: int = Field(..., alias="totalCredits")
     registrations: list[RegistrationResponse]
+
+
+class AdminStudentResponse(APIModel):
+    id: int
+    username: str
+    role: str
+
+
+class AdminScheduleCourse(APIModel):
+    code: str
+    name: str
+    department: str | None = None
+    credits: int
+    description: str | None = None
+
+
+class AdminScheduleSection(APIModel):
+    id: str
+    section_name: str = Field(..., alias="sectionName")
+    instructor: str | None = None
+    location: str | None = None
+    schedule: list[ScheduleSlot]
+    capacity: int
+    enrolled: int
+    available_seats: int = Field(..., alias="availableSeats")
+    status: str
+
+
+class AdminEnrollmentResponse(APIModel):
+    enrollment_id: int = Field(..., alias="enrollmentId")
+    enrollment_date: datetime | None = Field(default=None, alias="enrollmentDate")
+    course: AdminScheduleCourse
+    section: AdminScheduleSection
+
+
+class AdminTimetableItem(APIModel):
+    day: str
+    start_time: str = Field(..., alias="startTime")
+    end_time: str = Field(..., alias="endTime")
+    course_code: str = Field(..., alias="courseCode")
+    course_name: str = Field(..., alias="courseName")
+    section_id: str = Field(..., alias="sectionId")
+    section_name: str = Field(..., alias="sectionName")
+    instructor: str | None = None
+    location: str | None = None
+
+
+class AdminStudentScheduleResponse(APIModel):
+    student: AdminStudentResponse
+    total_credits: int = Field(..., alias="totalCredits")
+    enrolled_courses: list[AdminEnrollmentResponse] = Field(..., alias="enrolledCourses")
+    timetable: list[AdminTimetableItem]
 
 
 class AddCourseRequest(APIModel):
@@ -200,7 +253,21 @@ class CourseCreatedResponse(APIModel):
     message: str
 
 
+class CourseDeleteResponse(APIModel):
+    id: str
+    message: str
+    sections_deleted: int = Field(..., alias="sectionsDeleted")
+    enrollments_deleted: int = Field(..., alias="enrollmentsDeleted")
+
+
 class SectionActionResponse(APIModel):
+    section_id: str = Field(..., alias="sectionId")
+    message: str
+
+
+class AdminEnrollmentDeleteResponse(APIModel):
+    enrollment_id: int = Field(..., alias="enrollmentId")
+    student_id: str = Field(..., alias="studentId")
     section_id: str = Field(..., alias="sectionId")
     message: str
 

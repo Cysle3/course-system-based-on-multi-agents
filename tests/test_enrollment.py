@@ -162,6 +162,7 @@ def test_successful_enrollment_schedule_and_drop_workflow(
     assert schedule_response.status_code == 200
     schedule = schedule_response.json()
     assert schedule["totalCredits"] == 3
+    assert all("enrollmentId" in registration for registration in schedule["registrations"])
     assert any(
         registration["course"]["code"] == course_code
         for registration in schedule["registrations"]
@@ -249,6 +250,82 @@ def test_duplicate_enrollment_is_rejected(client, headers_admin, headers_student
 
     assert duplicate_response.status_code == 409
     assert _error_code(duplicate_response) in {"DUPLICATE_ENROLLMENT", "DUPLICATE_COURSE"}
+
+
+def test_admin_can_list_students_view_schedule_and_delete_enrollment(
+    client,
+    headers_admin,
+    headers_student,
+):
+    course_code = _create_course(
+        client,
+        headers_admin,
+        schedule=[{"day": "SAT", "startTime": "09:00", "endTime": "10:30"}],
+    )
+    section_id = _get_first_section_id(client, headers_student, course_code)
+
+    enroll_response = _enroll_student(client, headers_student, section_id)
+    assert enroll_response.status_code == 201, enroll_response.text
+
+    students_response = client.get("/admin/students", headers=headers_admin)
+    assert students_response.status_code == 200
+    students = students_response.json()
+    assert students
+    assert all(set(student.keys()) == {"id", "username", "role"} for student in students)
+    assert any(student["username"] == "student" and student["role"] == "STUDENT" for student in students)
+
+    schedule_response = client.get(
+        "/admin/students/student/schedule",
+        headers=headers_admin,
+    )
+    assert schedule_response.status_code == 200, schedule_response.text
+    schedule = schedule_response.json()
+    assert set(schedule.keys()) == {
+        "student",
+        "totalCredits",
+        "enrolledCourses",
+        "timetable",
+    }
+    assert schedule["student"]["username"] == "student"
+    assert schedule["student"]["role"] == "STUDENT"
+    assert schedule["totalCredits"] == 3
+
+    enrollment = next(
+        item for item in schedule["enrolledCourses"] if item["course"]["code"] == course_code
+    )
+    assert set(enrollment.keys()) == {"enrollmentId", "enrollmentDate", "course", "section"}
+    assert enrollment["section"]["id"] == section_id
+    assert enrollment["section"]["schedule"] == [
+        {"day": "SAT", "startTime": "09:00", "endTime": "10:30"}
+    ]
+    assert any(item["courseCode"] == course_code for item in schedule["timetable"])
+
+    delete_response = client.delete(
+        f"/admin/enrollments/{enrollment['enrollmentId']}",
+        headers=headers_admin,
+    )
+    assert delete_response.status_code == 200, delete_response.text
+    assert delete_response.json() == {
+        "enrollmentId": enrollment["enrollmentId"],
+        "studentId": "student",
+        "sectionId": section_id,
+        "message": "Enrollment deleted successfully.",
+    }
+
+    empty_schedule = client.get(
+        "/admin/students/student/schedule",
+        headers=headers_admin,
+    ).json()
+    assert empty_schedule["totalCredits"] == 0
+    assert empty_schedule["enrolledCourses"] == []
+    assert empty_schedule["timetable"] == []
+
+    missing_response = client.delete(
+        f"/admin/enrollments/{enrollment['enrollmentId']}",
+        headers=headers_admin,
+    )
+    assert missing_response.status_code == 404
+    assert _error_code(missing_response) == "ENROLLMENT_NOT_FOUND"
 
 
 @pytest.mark.xfail(reason="Current MVP API does not expose POST /admin/enrollments/override.")

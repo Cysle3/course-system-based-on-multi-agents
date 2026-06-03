@@ -271,7 +271,6 @@ def test_admin_enrollment_report_returns_current_enrollment_and_capacity(
     assert report_item["status"] == "OPEN"
 
 
-@pytest.mark.xfail(reason="Current MVP API does not expose DELETE /admin/sections/{sectionId}.")
 def test_admin_delete_section_cancel_endpoint(client, headers_admin):
     course_code = _create_course(client, headers_admin)
     section_id = _create_section(client, headers_admin, course_code)
@@ -279,3 +278,44 @@ def test_admin_delete_section_cancel_endpoint(client, headers_admin):
     response = client.delete(f"/admin/sections/{section_id}", headers=headers_admin)
 
     assert response.status_code == 200
+
+
+def test_admin_delete_course_removes_sections_and_related_enrollments(
+    client,
+    headers_admin,
+    headers_student,
+):
+    course_code = _create_course(client, headers_admin)
+    _create_section(client, headers_admin, course_code, section_name="Section C")
+
+    detail = client.get(f"/courses/{course_code}", headers=headers_student)
+    assert detail.status_code == 200, detail.text
+    sections = detail.json()["sections"]
+    assert len(sections) == 2
+
+    enroll_response = client.post(
+        "/students/me/schedule",
+        headers=headers_student,
+        json={"sectionId": sections[0]["id"]},
+    )
+    assert enroll_response.status_code == 201, enroll_response.text
+
+    response = client.delete(f"/admin/courses/{course_code}", headers=headers_admin)
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "id": course_code,
+        "message": f"Course {course_code} and all sections deleted successfully.",
+        "sectionsDeleted": 2,
+        "enrollmentsDeleted": 1,
+    }
+
+    missing_detail = client.get(f"/courses/{course_code}", headers=headers_student)
+    assert missing_detail.status_code == 404
+
+    schedule = client.get("/students/me/schedule", headers=headers_student)
+    assert schedule.status_code == 200
+    assert schedule.json()["registrations"] == []
+
+    repeated_delete = client.delete(f"/admin/courses/{course_code}", headers=headers_admin)
+    assert repeated_delete.status_code == 404

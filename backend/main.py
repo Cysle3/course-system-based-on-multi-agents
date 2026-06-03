@@ -10,40 +10,63 @@ try:
     import schemas
     from auth import create_access_token, get_password_hash, require_role
     from database import SessionLocal, get_db, init_db
-    from models import Course, Student
+    from models import Course, Enrollment, Student
 except ImportError:
     from . import crud, schemas
     from .auth import create_access_token, get_password_hash, require_role
     from .database import SessionLocal, get_db, init_db
-    from .models import Course, Student
+    from .models import Course, Enrollment, Student
 
 
 def seed_data(db: Session) -> None:
-    admin = db.query(Student).filter(Student.student_code == "admin").first()
-    if admin is None:
-        db.add(
-            Student(
-                student_code="admin",
-                password_hash=get_password_hash("admin"),
-                full_name="System Administrator",
-                email="admin@example.edu",
-                max_credits=0,
-                role="ADMIN",
-            )
-        )
+    user_seed = [
+        {
+            "student_code": "admin",
+            "password": "admin",
+            "full_name": "System Administrator",
+            "email": "admin@example.edu",
+            "max_credits": 0,
+            "role": "ADMIN",
+        },
+        {
+            "student_code": "student",
+            "password": "student",
+            "full_name": "Demo Student",
+            "email": "student@example.edu",
+            "max_credits": 18,
+            "role": "STUDENT",
+        },
+        {
+            "student_code": "student2",
+            "password": "student2",
+            "full_name": "Demo Student Two",
+            "email": "student2@example.edu",
+            "max_credits": 18,
+            "role": "STUDENT",
+        },
+        {
+            "student_code": "student3",
+            "password": "student3",
+            "full_name": "Demo Student Three",
+            "email": "student3@example.edu",
+            "max_credits": 18,
+            "role": "STUDENT",
+        },
+    ]
 
-    student = db.query(Student).filter(Student.student_code == "student").first()
-    if student is None:
-        db.add(
-            Student(
-                student_code="student",
-                password_hash=get_password_hash("student"),
-                full_name="Demo Student",
-                email="student@example.edu",
-                max_credits=18,
-                role="STUDENT",
+    for item in user_seed:
+        exists = db.query(Student).filter(Student.student_code == item["student_code"]).first()
+        if exists is None:
+            db.add(
+                Student(
+                    student_code=item["student_code"],
+                    password_hash=get_password_hash(item["password"]),
+                    full_name=item["full_name"],
+                    email=item["email"],
+                    max_credits=item["max_credits"],
+                    role=item["role"],
+                )
             )
-        )
 
     course_seed = [
         {
@@ -124,6 +147,36 @@ def seed_data(db: Session) -> None:
         )
         if exists is None:
             db.add(Course(**item))
+
+    db.commit()
+
+    enrollment_seed = [
+        ("student2", "CS101", "Section B"),
+        ("student2", "HIST202", "Section A"),
+        ("student3", "MATH200", "Section A"),
+        ("student3", "CS102", "Section A"),
+    ]
+
+    for student_code, course_code, section_name in enrollment_seed:
+        student = db.query(Student).filter(Student.student_code == student_code).first()
+        course = (
+            db.query(Course)
+            .filter(Course.course_code == course_code, Course.section == section_name)
+            .first()
+        )
+        if student is None or course is None:
+            continue
+
+        exists = (
+            db.query(Enrollment)
+            .filter(
+                Enrollment.student_id == student.student_id,
+                Enrollment.course_id == course.course_id,
+            )
+            .first()
+        )
+        if exists is None:
+            db.add(Enrollment(student_id=student.student_id, course_id=course.course_id))
 
     db.commit()
 
@@ -274,6 +327,20 @@ def create_course(
     return {"id": course.course_code, "message": "Course created successfully."}
 
 
+@app.delete(
+    "/admin/courses/{course_id}",
+    response_model=schemas.CourseDeleteResponse,
+    responses={404: {"model": schemas.ErrorResponse, "description": "Course not found"}},
+    tags=["Admin"],
+)
+def delete_course(
+    course_id: str,
+    current_user: Student = Depends(require_role("ADMIN")),
+    db: Session = Depends(get_db),
+):
+    return crud.delete_course(db, course_id)
+
+
 @app.post(
     "/admin/courses/{courseId}/sections",
     response_model=schemas.SectionActionResponse,
@@ -309,6 +376,61 @@ def update_section(
         "sectionId": crud.format_section_id(section.course_id),
         "message": "Section updated successfully.",
     }
+
+
+@app.delete(
+    "/admin/sections/{section_id}",
+    response_model=schemas.SectionActionResponse,
+    responses={404: {"model": schemas.ErrorResponse, "description": "Section not found"}},
+    tags=["Admin"],
+)
+def delete_section(
+    section_id: str,
+    current_user: Student = Depends(require_role("ADMIN")),
+    db: Session = Depends(get_db),
+):
+    return crud.delete_section(db, section_id)
+
+
+@app.get(
+    "/admin/students",
+    response_model=list[schemas.AdminStudentResponse],
+    responses={403: {"description": "Admin access required"}},
+    tags=["Admin"],
+)
+def list_students(
+    current_user: Student = Depends(require_role("ADMIN")),
+    db: Session = Depends(get_db),
+):
+    return crud.get_admin_students(db)
+
+
+@app.get(
+    "/admin/students/{student_id}/schedule",
+    response_model=schemas.AdminStudentScheduleResponse,
+    responses={404: {"model": schemas.ErrorResponse, "description": "Student not found"}},
+    tags=["Admin"],
+)
+def get_student_schedule_for_admin(
+    student_id: str,
+    current_user: Student = Depends(require_role("ADMIN")),
+    db: Session = Depends(get_db),
+):
+    return crud.get_admin_student_schedule(db, student_id)
+
+
+@app.delete(
+    "/admin/enrollments/{enrollment_id}",
+    response_model=schemas.AdminEnrollmentDeleteResponse,
+    responses={404: {"model": schemas.ErrorResponse, "description": "Enrollment not found"}},
+    tags=["Admin"],
+)
+def delete_enrollment_for_admin(
+    enrollment_id: int,
+    current_user: Student = Depends(require_role("ADMIN")),
+    db: Session = Depends(get_db),
+):
+    return crud.delete_admin_enrollment(db, enrollment_id)
 
 
 @app.get(

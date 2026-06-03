@@ -76,6 +76,17 @@ def test_login_success_returns_token_and_user(client):
     assert body["token"]
 
 
+@pytest.mark.parametrize("user_id", ["student2", "student3"])
+def test_seeded_additional_student_login_success(client, user_id):
+    response = client.post("/auth/login", json={"id": user_id, "password": user_id})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["user"]["id"] == user_id
+    assert body["user"]["role"] == "STUDENT"
+    assert body["token"]
+
+
 def test_valid_student_token_allows_protected_schedule_access(client, headers_student):
     response = client.get("/students/me/schedule", headers=headers_student)
 
@@ -117,3 +128,17 @@ def test_student_token_cannot_access_admin_endpoint(client, headers_student):
     )
 
     assert response.status_code == 403
+
+
+def test_student_token_cannot_access_admin_students_endpoint(client, headers_student):
+    response = client.get("/admin/students", headers=headers_student)
+
+    assert response.status_code == 403
+
+
+def test_admin_student_list_includes_seeded_students(client, headers_admin):
+    response = client.get("/admin/students", headers=headers_admin)
+
+    assert response.status_code == 200
+    usernames = {student["username"] for student in response.json()}
+    assert {"student", "student2", "student3"}.issubset(usernames)

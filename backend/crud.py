@@ -529,6 +529,7 @@ def get_student_schedule(db: Session, student_id: int) -> dict[str, Any]:
         total_credits += course.credits
         registrations.append(
             {
+                "enrollmentId": enrollment.enrollment_id,
                 "course": {
                     "code": course.course_code,
                     "name": course.course_name,
@@ -549,6 +550,145 @@ def get_student_schedule(db: Session, student_id: int) -> dict[str, Any]:
         "studentId": student.student_code,
         "totalCredits": total_credits,
         "registrations": registrations,
+    }
+
+
+def _admin_student_payload(student: Student) -> dict[str, Any]:
+    return {
+        "id": student.student_id,
+        "username": student.student_code,
+        "role": student.role,
+    }
+
+
+def get_admin_students(db: Session) -> list[dict[str, Any]]:
+    students = (
+        db.query(Student)
+        .filter(Student.role == "STUDENT")
+        .order_by(Student.student_code)
+        .all()
+    )
+    return [_admin_student_payload(student) for student in students]
+
+
+def resolve_student(db: Session, student_id: str | int) -> Student | None:
+    text = str(student_id).strip()
+    student = None
+    if text.isdigit():
+        student = db.get(Student, int(text))
+        if student is not None:
+            return student if student.role == "STUDENT" else None
+
+    student = (
+        db.query(Student)
+        .filter(func.upper(Student.student_code) == text.upper())
+        .first()
+    )
+    if student is None or student.role != "STUDENT":
+        return None
+    return student
+
+
+def _admin_section_payload(db: Session, course: Course) -> dict[str, Any]:
+    enrolled = get_enrolled_count(db, course.course_id)
+    available = max(course.capacity - enrolled, 0)
+    return {
+        "id": format_section_id(course.course_id),
+        "sectionName": course.section,
+        "instructor": course.instructor_name,
+        "location": course.location,
+        "schedule": parse_time_slot(course.time_slot),
+        "capacity": course.capacity,
+        "enrolled": enrolled,
+        "availableSeats": available,
+        "status": "OPEN" if available > 0 else "CLOSED",
+    }
+
+
+def get_admin_student_schedule(db: Session, student_id: str | int) -> dict[str, Any]:
+    student = resolve_student(db, student_id)
+    if student is None:
+        raise BusinessRuleError("STUDENT_NOT_FOUND", "Student not found.", 404)
+
+    enrollments = (
+        db.query(Enrollment)
+        .join(Course, Enrollment.course_id == Course.course_id)
+        .filter(Enrollment.student_id == student.student_id)
+        .order_by(Course.course_code, Course.section)
+        .all()
+    )
+
+    total_credits = 0
+    enrolled_courses = []
+    timetable = []
+    for enrollment in enrollments:
+        course = enrollment.course
+        section_id = format_section_id(course.course_id)
+        schedule = parse_time_slot(course.time_slot)
+        total_credits += course.credits
+
+        enrolled_courses.append(
+            {
+                "enrollmentId": enrollment.enrollment_id,
+                "enrollmentDate": enrollment.enrollment_date,
+                "course": {
+                    "code": course.course_code,
+                    "name": course.course_name,
+                    "department": course.department,
+                    "credits": course.credits,
+                    "description": course.description,
+                },
+                "section": _admin_section_payload(db, course),
+            }
+        )
+
+        for slot in schedule:
+            timetable.append(
+                {
+                    "day": slot["day"],
+                    "startTime": slot["startTime"],
+                    "endTime": slot["endTime"],
+                    "courseCode": course.course_code,
+                    "courseName": course.course_name,
+                    "sectionId": section_id,
+                    "sectionName": course.section,
+                    "instructor": course.instructor_name,
+                    "location": course.location,
+                }
+            )
+
+    return {
+        "student": _admin_student_payload(student),
+        "totalCredits": total_credits,
+        "enrolledCourses": enrolled_courses,
+        "timetable": sorted(
+            timetable,
+            key=lambda item: (
+                DAY_ORDER.get(item["day"], 99),
+                item["startTime"],
+                item["courseCode"],
+            ),
+        ),
+    }
+
+
+def delete_admin_enrollment(db: Session, enrollment_id: int) -> dict[str, Any]:
+    enrollment = db.get(Enrollment, enrollment_id)
+    if enrollment is None:
+        raise BusinessRuleError("ENROLLMENT_NOT_FOUND", "Enrollment not found.", 404)
+
+    student_code = enrollment.student.student_code
+    section_id = format_section_id(enrollment.course.course_id)
+    deleted_id = enrollment.enrollment_id
+
+    db.delete(enrollment)
+    db.commit()
+
+    return {
+        "enrollmentId": deleted_id,
+        "studentId": student_code,
+        "sectionId": section_id,
+        "message": "Enrollment deleted successfully.",
     }
 
 
@@ -707,6 +847,62 @@ def update_section(db: Session, section_id: str | int, payload: Any) -> Course:
         ) from exc
     db.refresh(section)
     return section
+
+
+def delete_section(db: Session, section_id: str | int) -> dict[str, str]:
+    section = resolve_section(db, section_id)
+    if section is None:
+        raise BusinessRuleError("SECTION_NOT_FOUND", "Section not found.", 404)
+
+    section_identifier = format_section_id(section.course_id)
+    course_code = section.course_code
+    section_name = section.section
+
+    db.query(Enrollment).filter(Enrollment.course_id == section.course_id).delete(
+        synchronize_session=False
+    )
+    db.delete(section)
+    db.commit()
+
+    return {
+        "sectionId": section_identifier,
+        "message": f"Section {course_code} - {section_name} deleted successfully.",
+    }
+
+
+def delete_course(db: Session, course_id: str | int) -> dict[str, Any]:
+    course_ref = resolve_course_reference(db, course_id)
+    if course_ref is None:
+        raise BusinessRuleError("COURSE_NOT_FOUND", "Course not found.", 404)
+
+    course_code = course_ref.course_code
+    sections = (
+        db.query(Course)
+        .filter(func.upper(Course.course_code) == course_code.upper())
+        .all()
+    )
+    section_ids = [section.course_id for section in sections]
+    if not section_ids:
+        raise BusinessRuleError("COURSE_NOT_FOUND", "Course not found.", 404)
+
+    enrollments_deleted = (
+        db.query(Enrollment)
+        .filter(Enrollment.course_id.in_(section_ids))
+        .delete(synchronize_session=False)
+    )
+    sections_deleted = (
+        db.query(Course)
+        .filter(Course.course_id.in_(section_ids))
+        .delete(synchronize_session=False)
+    )
+    db.commit()
+
+    return {
+        "id": course_code,
+        "message": f"Course {course_code} and all sections deleted successfully.",
+        "sectionsDeleted": sections_deleted,
+        "enrollmentsDeleted": enrollments_deleted,
+    }
 
 
 def get_enrollment_report(db: Session, department: str | None = None) -> dict[str, Any]:
